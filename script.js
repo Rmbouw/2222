@@ -1,4 +1,6 @@
 let model;
+let currentStream = null;
+
 const webcam = document.getElementById('webcam');
 const imgPrev = document.getElementById('image-preview');
 const dashboard = document.getElementById('result-dashboard');
@@ -14,55 +16,52 @@ const canvas = document.getElementById('capture-canvas');
 (async () => {
     try {
         model = await mobilenet.load();
-        console.log("AI Model Siap");
+        console.log("AI Ready");
     } catch (e) {
-        console.error("Gagal memuat model AI");
+        console.error("Gagal load AI");
     }
 })();
 
+// 2. Buka Kamera
 async function openCamera() {
-    const constraints = {
-        video: { 
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-        }
-    };
-
+    stopCamera();
     try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        webcam.srcObject = stream;
-        
-        webcam.setAttribute('playsinline', true); 
-        
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment", width: 1280, height: 720 } 
+        });
+        webcam.srcObject = currentStream;
+        webcam.setAttribute('playsinline', true);
         webcam.style.display = "block";
         imgPrev.style.display = "none";
         btnSnap.style.display = "flex";
         confirmUI.style.display = "none";
         mainControls.style.display = "flex";
         dashboard.classList.remove('visible');
-        instruction.innerHTML = "<p>Posisikan tanaman di dalam kotak, lalu tekan tombol kamera.</p>";
+        instruction.innerHTML = "<p>Posisikan tanaman, lalu ambil foto.</p>";
     } catch (e) {
-        alert("Izin kamera ditolak. Pastikan situs menggunakan HTTPS.");
+        alert("Kamera gagal dibuka. Gunakan HTTPS.");
+    }
+}
+
+function stopCamera() {
+    if (currentStream) {
+        currentStream.getTracks().forEach(t => t.stop());
+        currentStream = null;
     }
 }
 
 function takePhoto() {
     canvas.width = webcam.videoWidth;
     canvas.height = webcam.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
-    
+    canvas.getContext('2d').drawImage(webcam, 0, 0);
     imgPrev.src = canvas.toDataURL('image/jpeg');
     imgPrev.style.display = "block";
     webcam.style.display = "none";
-    
     btnSnap.style.display = "none";
-    mainControls.style.display = "none"; 
-    confirmUI.style.display = "flex";    
-    instruction.innerHTML = "<p>Apakah gambar sudah jelas? Tekan <b>V</b> untuk diagnosa.</p>";
+    mainControls.style.display = "none";
+    confirmUI.style.display = "flex";
+    instruction.innerHTML = "<p>Sudah jelas? Tekan <b>V</b> untuk analisa.</p>";
 }
-
 
 function cancelPhoto() {
     imgPrev.style.display = "none";
@@ -70,34 +69,28 @@ function cancelPhoto() {
     btnSnap.style.display = "flex";
     confirmUI.style.display = "none";
     mainControls.style.display = "flex";
-    instruction.innerHTML = "<p>Silahkan upload atau gunakan kamera untuk scan tanaman anda.</p>";
 }
 
 function proceedAnalysis() {
-    actionArea.style.display = "none"; 
+    actionArea.style.display = "none";
     scanner.style.display = "block";
     loadingText.style.display = "block";
-    
-    if(webcam.srcObject) {
-        webcam.srcObject.getTracks().forEach(track => track.stop());
-    }
-    
+    stopCamera();
     setTimeout(() => { executeAI(imgPrev); }, 1000);
 }
 
-function handleUpload(event) {
-    const file = event.target.files[0];
+function handleUpload(e) {
+    const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
-        imgPrev.src = e.target.result;
+    reader.onload = (event) => {
+        imgPrev.src = event.target.result;
         imgPrev.style.display = "block";
         webcam.style.display = "none";
         btnSnap.style.display = "none";
         mainControls.style.display = "none";
         confirmUI.style.display = "flex";
         dashboard.classList.remove('visible');
-        instruction.innerHTML = "<p>Gambar siap. Tekan <b>V</b> untuk diagnosa.</p>";
     };
     reader.readAsDataURL(file);
 }
@@ -110,33 +103,47 @@ async function executeAI(source) {
     const predictions = await model.classify(source);
     
     const plantKeys = [
-        'leaf', 'plant', 'tree', 'flower', 'vegetable', 'fruit', 'grass', 'flora',
-        'corn', 'maize', 'ear', 'grain', 'paddy', 'stem', 'organism', 'potted',
-        'pineapple', 'banana', 'herb', 'shrub', 'produce'
+        'leaf', 'plant', 'tree', 'flower', 'flora', 'stem', 'root', 'potted', 'grass', 'herb', 'shrub', 'nature', 'garden',
+        
+        'fruit', 'apple', 'banana', 'orange', 'lemon', 'pineapple', 'grape', 'strawberry', 'mango', 
+        'pomegranate', 'durian', 'guava', 'fig', 'pear', 'apricot', 'jackfruit', 'coconut', 'papaya', 
+        'watermelon', 'melon', 'cherry', 'berry', 'plum', 'citrus', 'lime', 'avocado',
+        
+        'vegetable', 'corn', 'maize', 'paddy', 'grain', 'bean', 'pepper', 'chili', 'tomato', 'potato',
+        'cabbage', 'broccoli', 'cucumber', 'pumpkin', 'eggplant', 'carrot', 'onion', 'garlic', 'spinach',
+        
+        'fern', 'palm', 'cactus', 'succulent', 'orchid', 'rose', 'daisy', 'sunflower', 'tulip', 'lily',
+        'croton', 'aglaonema', 'monstera', 'calathea', 'bonsai', 'moss', 'conifer', 'pine', 'bamboo',
+        'organism', 'ear of corn', 'buckeye', 'head of cabbage'
     ];
     
-    // Cek di 5 prediksi teratas
-    const isPlant = predictions.slice(0, 5).find(p => 
+    const isPlant = predictions.slice(0, 10).find(p => 
         plantKeys.some(key => p.className.toLowerCase().includes(key))
     );
 
     loadingText.style.display = "none";
     scanner.style.display = "none";
+    actionArea.style.display = "block";
 
     if (!isPlant) {
-        actionArea.style.display = "block";
-        mainControls.style.display = "flex";
         confirmUI.style.display = "none";
+        mainControls.style.display = "flex";
         instruction.innerHTML = `
         <div class="error-box-tua">
-            <i class="fa-solid fa-triangle-exclamation"></i> 
-            <b>OBJEK TIDAK DIKENALI</b>
-            <small>AI mendeteksi ini sebagai: ${predictions[0].className}</small>
+            <b>OBJEK TIDAK DIKENALI SEBAGAI FLORA</b>
+            <small>AI Mendeteksi: ${predictions[0].className}</small>
+            <p style="font-size:11px; color:#ffcccc; margin-top:5px;">
+               Tips: Pastikan hanya ada satu buah/daun di kamera dan pencahayaan cukup terang.
+            </p>
         </div>`;
         return;
     }
 
     dashboard.classList.add('visible');
+    confirmUI.style.display = "none";
+    mainControls.style.display = "none";
+    instruction.innerHTML = "";
+
     const name = isPlant.className.split(',')[0].toUpperCase();
     const score = Math.round(isPlant.probability * 100);
     
@@ -146,31 +153,39 @@ async function executeAI(source) {
     const circle = document.getElementById('res-circle');
     circle.style.strokeDashoffset = 226 - (226 * score / 100);
     
-    const isSick = ['brown', 'dry', 'dead', 'rot', 'mold', 'fungus', 'spot'].some(w => name.toLowerCase().includes(w));
+    const isSick = ['brown', 'dry', 'dead', 'rot', 'mold', 'fungus', 'spot', 'yellow', 'wither', 'rust'].some(w => 
+        name.toLowerCase().includes(w)
+    );
+    
     const statusEl = document.getElementById('res-status');
     const adviceEl = document.getElementById('res-advice');
 
-    if (isSick || score < 40) {
+    if (isSick || score < 30) {
         statusEl.innerText = "TIDAK SEHAT";
         statusEl.style.color = "var(--danger)";
         circle.style.stroke = "var(--danger)";
-        adviceEl.innerText = "Terdeteksi gejala penyakit atau kerusakan jaringan.";
+        adviceEl.innerText = "Ditemukan indikasi ketidaksehatan. Periksa kelembapan atau adanya hama.";
     } else {
         statusEl.innerText = "SEHAT";
         statusEl.style.color = "var(--success)";
         circle.style.stroke = "var(--success)";
-        adviceEl.innerText = "Tanaman terlihat sehat. Teruskan perawatan rutin.";
+        adviceEl.innerText = "Objek terlihat segar dan dalam kondisi normal.";
     }
 }
 
 function resetAll() {
     dashboard.classList.remove('visible');
+    
+    stopCamera();
+    
+    imgPrev.style.display = "none";
+    imgPrev.src = ""; 
+    
     actionArea.style.display = "block";
     mainControls.style.display = "flex";
     confirmUI.style.display = "none";
-    imgPrev.style.display = "none";
-    webcam.style.display = "none";
-    btnSnap.style.display = "none";
-    instruction.innerHTML = "<p>Silahkan upload atau gunakan kamera untuk scan tanaman anda.</p>";
+    webcam.style.display = "none"; 
+    btnSnap.style.display = "none"; 
+    
+    instruction.innerHTML = "<p>Silahkan upload atau gunakan kamera untuk menganalisis tanaman anda.</p>";
 }
-
