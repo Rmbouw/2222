@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantScan AI - Diagnosa Tanaman</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1 class="brand-title"><i class="fa-solid fa-leaf"></i> PlantScan AI</h1>
+    </header>
+
+    <div class="card main-card">
+        <div class="viewer-box" id="viewer-container">
+            <div class="scan-line" id="scanner"></div>
+            <video id="webcam" autoplay playsinline></video>
+            <img id="image-preview">
+            
+            <button id="btn-snap" class="btn-round btn-capture" onclick="takePhoto()">
+                <i class="fa-solid fa-camera"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="action-area">
+        <div class="confirm-container" id="confirm-ui">
+            <button class="btn-round btn-cancel" onclick="cancelPhoto()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <button class="btn-round btn-check" onclick="proceedAnalysis()">
+                <i class="fa-solid fa-check"></i>
+            </button>
+        </div>
+
+        <div class="btn-group" id="main-controls">
+            <button class="btn btn-main" onclick="openCamera()">
+                <i class="fa-solid fa-video"></i> Kamera
+            </button>
+            <button class="btn btn-alt" onclick="document.getElementById('file-in').click()">
+                <i class="fa-solid fa-image"></i> Galeri
+            </button>
+            <input type="file" id="file-in" hidden accept="image/*" onchange="handleUpload(event)">
+        </div>
+
+        <div id="instruction" class="helper-text">
+            <p>Silahkan upload atau gunakan kamera untuk scan tanaman anda.</p>
+        </div>
+    </div>
+
+    <div id="loading-text">
+        <div class="spinner"></div>
+        <p>MENGANALISIS JARINGAN...</p>
+    </div>
+
+    <div id="result-dashboard" class="card dashboard-card">
+        <div class="stats-grid">
+            <div class="stat-box">
+                <span class="label">Identifikasi</span>
+                <span id="res-name" class="value">-</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">Kondisi</span>
+                <span id="res-status" class="value">-</span>
+            </div>
+            <div class="health-circle-container">
+                <div class="score-info">
+                    <span class="label">Kesehatan</span>
+                    <span id="res-percent" class="big-score">0%</span>
+                </div>
+                <div class="circle-wrap">
+                    <svg>
+                        <circle class="circle-bg" cx="40" cy="40" r="36"></circle>
+                        <circle id="res-circle" class="circle-fg" cx="40" cy="40" r="36"></circle>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        <p id="res-advice" class="advice-text"></p>
+        <button class="btn btn-delete" onclick="resetAll()">
+            <i class="fa-solid fa-rotate-left"></i> Scan Ulang
+        </button>
+    </div>
+</div>
+
+<canvas id="capture-canvas"></canvas>
+
+<script src="script.js"></script>
+</body>
+</html>
