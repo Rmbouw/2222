@@ -115,53 +115,57 @@ function handleUpload(e) {
     };
     reader.readAsDataURL(file);
 }
-
 async function executeAI(source) {
     if (!source.complete) {
         await new Promise(r => source.onload = r);
     }
 
-    // TopK 15 agar lebih detail mendeteksi banyak jenis varietas
-    const predictions = await model.classify(source, 15); 
+    // Kita ambil hasil yang paling dominan (Top 1) dan beberapa cadangan
+    const predictions = await model.classify(source, 10); 
     
-    const plantKeys = [
-        'leaf', 'plant', 'tree', 'flower', 'flora', 'stem', 'root', 'potted', 'grass', 'herb', 'shrub', 'nature', 'garden',
-        'fruit', 'apple', 'banana', 'orange', 'lemon', 'pineapple', 'grape', 'strawberry', 'mango', 
-        'pomegranate', 'durian', 'guava', 'fig', 'pear', 'apricot', 'jackfruit', 'coconut', 'papaya', 
-        'watermelon', 'melon', 'cherry', 'berry', 'plum', 'citrus', 'lime', 'avocado',
-        'vegetable', 'corn', 'maize', 'paddy', 'grain', 'bean', 'pepper', 'chili', 'tomato', 'potato',
-        'cabbage', 'broccoli', 'cucumber', 'pumpkin', 'eggplant', 'carrot', 'onion', 'garlic', 'spinach',
-        'fern', 'palm', 'cactus', 'succulent', 'orchid', 'rose', 'daisy', 'sunflower', 'tulip', 'lily',
-        'croton', 'aglaonema', 'monstera', 'calathea', 'bonsai', 'moss', 'conifer', 'pine', 'bamboo',
-        'organism', 'ear of corn', 'buckeye', 'head of cabbage', 'hip', 'buckeye', 'custard apple'
+    // DAFTAR SAH FLORA (Hanya ini yang boleh lewat)
+    const floraDatabase = [
+        'leaf', 'plant', 'tree', 'flower', 'flora', 'fruit', 'vegetable', 'nature', 'herb', 'shrub',
+        'apple', 'banana', 'orange', 'lemon', 'pineapple', 'grape', 'strawberry', 'mango', 'pomegranate',
+        'corn', 'maize', 'paddy', 'tomato', 'potato', 'chili', 'cactus', 'succulent', 'orchid', 'rose',
+        'bonsai', 'moss', 'fern', 'palm', 'grass', 'bud', 'petal', 'stem', 'branch'
     ];
-    
-    const isPlant = predictions.find(p => 
-        plantKeys.some(key => p.className.toLowerCase().includes(key))
-    );
+
+    // --- LOGIKA PENYARINGAN SUPER KETAT ---
+    const topResult = predictions[0]; // Benda paling jelas di foto
+    const topName = topResult.className.toLowerCase();
+
+    // Cek apakah benda paling dominan itu beneran flora atau bukan
+    const isTopResultFlora = floraDatabase.some(key => topName.includes(key));
 
     loadingText.style.display = "none";
     scanner.style.display = "none";
     actionArea.style.display = "block";
 
-    if (!isPlant) {
+    // KALAU BENDA PALING JELAS BUKAN TANAMAN/BUAH -> LANGSUNG TOLAK!
+    if (!isTopResultFlora) {
         confirmUI.style.display = "none";
         mainControls.style.display = "flex";
+        
+        let detectedObject = topResult.className.split(',')[0].toUpperCase();
+        
         instruction.innerHTML = `
-        <div class="error-box-tua">
-            <b>OBJEK TIDAK DIKENALI SEBAGAI FLORA</b>
-            <small>AI Mendeteksi: ${predictions[0].className}</small>
+        <div class="error-box-tua" style="border: 2px solid #ff4444; background: rgba(255,0,0,0.1); padding: 15px; border-radius: 12px;">
+            <b style="color: #ff4444; font-size: 16px;">BUKAN OBJEK FLORA!</b><br>
+            <span style="font-size: 13px; color: #eee;">AI mendeteksi ini adalah: <b style="color: #ffcc00;">${detectedObject}</b></span>
+            <p style="font-size: 11px; margin-top: 8px; color: #bbb;">Analisa dibatalkan. Mohon foto Tanaman, Buah, atau Daun secara jelas.</p>
         </div>`;
         return;
     }
 
+    // JIKA LOLOS (Berarti beneran flora)
     dashboard.classList.add('visible');
     confirmUI.style.display = "none";
     mainControls.style.display = "none";
     instruction.innerHTML = "";
 
-    const name = isPlant.className.split(',')[0].toUpperCase();
-    const score = Math.round(isPlant.probability * 100);
+    const name = topResult.className.split(',')[0].toUpperCase();
+    const score = Math.round(topResult.probability * 100);
     
     document.getElementById('res-name').innerText = name;
     document.getElementById('res-percent').innerText = score + "%";
@@ -169,26 +173,26 @@ async function executeAI(source) {
     const circle = document.getElementById('res-circle');
     circle.style.strokeDashoffset = 226 - (226 * score / 100);
     
+    // Deteksi penyakit sederhana
     const isSick = ['brown', 'dry', 'dead', 'rot', 'mold', 'fungus', 'spot', 'yellow', 'wither', 'rust'].some(w => 
-        name.toLowerCase().includes(w)
+        topName.includes(w)
     );
     
     const statusEl = document.getElementById('res-status');
     const adviceEl = document.getElementById('res-advice');
 
-    if (isSick || score < 30) {
-        statusEl.innerText = "TIDAK SEHAT";
-        statusEl.style.color = "var(--danger)";
-        circle.style.stroke = "var(--danger)";
-        adviceEl.innerText = "Terdeteksi indikasi tidak sehat. Periksa nutrisi, air, atau hama.";
+    if (isSick || score < 40) {
+        statusEl.innerText = "KONDISI BURUK";
+        statusEl.style.color = "#ff4444";
+        circle.style.stroke = "#ff4444";
+        adviceEl.innerText = "Objek terdeteksi mengalami kerusakan jaringan atau kurang fokus.";
     } else {
-        statusEl.innerText = "SEHAT";
-        statusEl.style.color = "var(--success)";
-        circle.style.stroke = "var(--success)";
-        adviceEl.innerText = "Objek terlihat segar dan dalam kondisi normal.";
+        statusEl.innerText = "KONDISI SEHAT";
+        statusEl.style.color = "#00ff88";
+        circle.style.stroke = "#00ff88";
+        adviceEl.innerText = "Flora terlihat segar dan normal.";
     }
 }
-
 function resetAll() {
     dashboard.classList.remove('visible');
     stopCamera();
