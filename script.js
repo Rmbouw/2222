@@ -1,5 +1,6 @@
 let model;
 let currentStream = null;
+let isModelReady = false; // Penjaga status model
 
 const webcam = document.getElementById('webcam');
 const imgPrev = document.getElementById('image-preview');
@@ -15,10 +16,15 @@ const canvas = document.getElementById('capture-canvas');
 
 (async () => {
     try {
+        loadingText.innerText = "Memuat Kecerdasan Buatan...";
         model = await mobilenet.load();
+        isModelReady = true;
+        loadingText.innerText = "AI Siap Digunakan";
         console.log("AI Ready");
+        setTimeout(() => { loadingText.style.display = "none"; }, 2000);
     } catch (e) {
         console.error("Gagal load AI");
+        loadingText.innerText = "Gagal memuat AI. Refresh halaman.";
     }
 })();
 
@@ -26,7 +32,7 @@ async function openCamera() {
     stopCamera();
     try {
         currentStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: 1280, height: 720 } 
+            video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
         });
         webcam.srcObject = currentStream;
         webcam.setAttribute('playsinline', true);
@@ -50,15 +56,23 @@ function stopCamera() {
 }
 
 function takePhoto() {
-    canvas.width = webcam.videoWidth;
-    canvas.height = webcam.videoHeight;
-    canvas.getContext('2d').drawImage(webcam, 0, 0);
-    imgPrev.src = canvas.toDataURL('image/jpeg');
+    // Optimasi: Resize langsung ke 400px agar deteksi di HP kilat
+    canvas.width = 400;
+    canvas.height = 400;
+    
+    // Ambil bagian tengah kamera (Square Crop) agar objek tidak gepeng
+    const minDim = Math.min(webcam.videoWidth, webcam.videoHeight);
+    const sx = (webcam.videoWidth - minDim) / 2;
+    const sy = (webcam.videoHeight - minDim) / 2;
+
+    canvas.getContext('2d').drawImage(webcam, sx, sy, minDim, minDim, 0, 0, 400, 400);
+    
+    imgPrev.src = canvas.toDataURL('image/jpeg', 0.8);
     imgPrev.style.display = "block";
     webcam.style.display = "none";
     btnSnap.style.display = "none";
     mainControls.style.display = "none";
-    confirmUI.style.display = "flex"; // ICON CENTANG SILANG MUNCUL DI SINI
+    confirmUI.style.display = "flex"; 
     instruction.innerHTML = "<p>Sudah jelas? Tekan <b>V</b> untuk analisa.</p>";
 }
 
@@ -71,12 +85,16 @@ function cancelPhoto() {
 }
 
 function proceedAnalysis() {
+    if(!isModelReady) return alert("Tunggu AI siap!");
+    
     actionArea.style.display = "none";
     scanner.style.display = "block";
     loadingText.style.display = "block";
+    loadingText.innerText = "Menganalisa...";
     stopCamera();
-    // Kasih delay dikit biar animasi scanner jalan dulu, nggak langsung freeze
-    setTimeout(() => { executeAI(imgPrev); }, 500);
+    
+    // Langsung eksekusi tanpa nunggu refresh
+    setTimeout(() => { executeAI(imgPrev); }, 300);
 }
 
 function handleUpload(e) {
@@ -85,13 +103,15 @@ function handleUpload(e) {
     const reader = new FileReader();
     reader.onload = (event) => {
         imgPrev.src = event.target.result;
-        imgPrev.style.display = "block";
-        webcam.style.display = "none";
-        btnSnap.style.display = "none";
-        mainControls.style.display = "none";
-        confirmUI.style.display = "flex"; // ICON CENTANG SILANG MUNCUL SETELAH UPLOAD
-        dashboard.classList.remove('visible');
-        instruction.innerHTML = "<p>Gambar berhasil dimuat. Tekan <b>V</b> untuk analisa.</p>";
+        imgPrev.onload = () => { // Pastikan gambar kelar dimuat sebelum ganti UI
+            imgPrev.style.display = "block";
+            webcam.style.display = "none";
+            btnSnap.style.display = "none";
+            mainControls.style.display = "none";
+            confirmUI.style.display = "flex"; 
+            dashboard.classList.remove('visible');
+            instruction.innerHTML = "<p>Gambar berhasil dimuat. Tekan <b>V</b> untuk analisa.</p>";
+        };
     };
     reader.readAsDataURL(file);
 }
@@ -101,8 +121,8 @@ async function executeAI(source) {
         await new Promise(r => source.onload = r);
     }
 
-    // DISINI KUNCINYA: ditambah angka 10 biar cepet di HP (nggak nyari sampe ribuan)
-    const predictions = await model.classify(source, 10); 
+    // TopK 15 agar lebih detail mendeteksi banyak jenis varietas
+    const predictions = await model.classify(source, 15); 
     
     const plantKeys = [
         'leaf', 'plant', 'tree', 'flower', 'flora', 'stem', 'root', 'potted', 'grass', 'herb', 'shrub', 'nature', 'garden',
@@ -113,7 +133,7 @@ async function executeAI(source) {
         'cabbage', 'broccoli', 'cucumber', 'pumpkin', 'eggplant', 'carrot', 'onion', 'garlic', 'spinach',
         'fern', 'palm', 'cactus', 'succulent', 'orchid', 'rose', 'daisy', 'sunflower', 'tulip', 'lily',
         'croton', 'aglaonema', 'monstera', 'calathea', 'bonsai', 'moss', 'conifer', 'pine', 'bamboo',
-        'organism', 'ear of corn', 'buckeye', 'head of cabbage'
+        'organism', 'ear of corn', 'buckeye', 'head of cabbage', 'hip', 'buckeye', 'custard apple'
     ];
     
     const isPlant = predictions.find(p => 
@@ -160,7 +180,7 @@ async function executeAI(source) {
         statusEl.innerText = "TIDAK SEHAT";
         statusEl.style.color = "var(--danger)";
         circle.style.stroke = "var(--danger)";
-        adviceEl.innerText = "Ditemukan indikasi ketidaksehatan. Periksa kelembapan atau adanya hama.";
+        adviceEl.innerText = "Terdeteksi indikasi tidak sehat. Periksa nutrisi, air, atau hama.";
     } else {
         statusEl.innerText = "SEHAT";
         statusEl.style.color = "var(--success)";
@@ -181,18 +201,3 @@ function resetAll() {
     btnSnap.style.display = "none"; 
     instruction.innerHTML = "<p>Silahkan upload atau gunakan kamera untuk menganalisis tanaman anda.</p>";
 }
-
-let isModelReady = false;
-(async () => {
-    try {
-        loadingText.innerText = "Memuat Kecerdasan Buatan...";
-        model = await mobilenet.load();
-        isModelReady = true;
-        loadingText.innerText = "AI Siap Digunakan";
-        console.log("AI Ready");
-        setTimeout(() => { loadingText.style.display = "none"; }, 2000);
-    } catch (e) {
-        console.error("Gagal load AI");
-        loadingText.innerText = "Gagal memuat AI. Refresh halaman.";
-    }
-})();
