@@ -1,11 +1,11 @@
 :root {
-            --primary: #00d2ff;
-            --success: #8c00ff;
-            --danger: #e91d4c;
-            --bg: #97a518;
-            --glass: rgba(255, 255, 255, 0.05);
-            --border: rgba(255, 255, 255, 0.1);
-        }
+    --primary: #00d2ff;
+    --success: #8c00ff;
+    --danger: #e91d4c;
+    --bg: #97a518;
+    --glass: rgba(255, 255, 255, 0.05);
+    --border: rgba(255, 255, 255, 0.1);
+}
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -101,8 +101,10 @@ body {
     text-align: center;
     margin-top: 30px;
     font-size: 1rem;
-    color: #090a0a;
+    color: #f1f5f9; 
     line-height: 1.6;
+    font-weight: 500;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5); 
 }
 
 #result-dashboard { display: none; opacity: 0; }
@@ -135,22 +137,10 @@ circle { fill: none; stroke-width: 8; stroke-linecap: round; }
 
 canvas { display: none; }
 
-.helper-text {
-    text-align: center;
-    margin-top: 30px;
-    font-size: 1rem;
-    color: #f1f5f9; 
-    line-height: 1.6;
-    font-weight: 500;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5); 
-}
-
 .error-box-tua {
     color: #ff0000; 
     border: 2px solid #8b0000;
-    
     background: rgba(90, 89, 89, 0.4); 
-    
     padding: 15px;
     border-radius: 12px;
     margin-top: 15px;
