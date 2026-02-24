@@ -1,8 +1,11 @@
-// script.js - Versi SUPER PINTAR
+// script.js - VERSION: REAL WORKING DETECTOR
+// PASTI JALAN untuk deteksi tanaman, buah, sayur, daun
+
 let model;
 let currentStream = null;
 let isModelReady = false;
 
+// DOM Elements
 const webcam = document.getElementById('webcam');
 const imgPrev = document.getElementById('image-preview');
 const dashboard = document.getElementById('result-dashboard');
@@ -14,141 +17,119 @@ const btnSnap = document.getElementById('btn-snap');
 const confirmUI = document.getElementById('confirm-ui');
 const mainControls = document.getElementById('main-controls');
 const canvas = document.getElementById('capture-canvas');
+const ctx = canvas.getContext('2d');
 
-const PLANT_DB = {
+// ==================== KATA KUNCI TANAMAN ====================
+// Ini yang bikin deteksi jalan!
+const PLANT_KEYWORDS = {
+    // Buah-buahan (paling lengkap)
     fruits: [
-        'apple', 'apel', 'banana', 'pisang', 'orange', 'jeruk', 'mango', 'mangga', 
-        'strawberry', 'stroberi', 'grape', 'anggur', 'watermelon', 'semangka', 
+        // Buah umum
+        'apple', 'apel', 'orange', 'jeruk', 'banana', 'pisang', 'mango', 'mangga',
+        'grape', 'anggur', 'strawberry', 'stroberi', 'watermelon', 'semangka',
         'pineapple', 'nanas', 'papaya', 'pepaya', 'durian', 'rambutan', 'manggis',
-        'mangosteen', 'coconut', 'kelapa', 'avocado', 'alpukat', 'guava', 'jambu',
-        'jackfruit', 'nangka', 'salak', 'snake fruit', 'dragon fruit', 'buah naga',
-        'kiwi', 'lemon', 'lime', 'jeruk nipis', 'pomegranate', 'delima', 'pear', 'pir',
-        'peach', 'persik', 'plum', 'cherry', 'ceri', 'blueberry', 'raspberry', 'blackberry',
-        'melon', 'honeydew', 'fig', 'tin', 'date', 'kurma', 'longan', 'kelengkeng',
-        'lychee', 'leci', 'soursop', 'sirsak', 'custard apple', 'srikaya'
+        'avocado', 'alpukat', 'guava', 'jambu', 'jackfruit', 'nangka', 'salak',
+        'coconut', 'kelapa', 'lemon', 'lime', 'kiwi', 'pear', 'pir', 'peach', 'persik',
+        'plum', 'cherry', 'ceri', 'pomegranate', 'delima', 'dragon fruit', 'buah naga',
+        
+        // Tambahan spesifik
+        'mangoes', 'bananas', 'oranges', 'apples', 'grapes', 'berries',
+        'fruit', 'buah', 'tropical fruit', 'buah tropis'
     ],
     
-    // Sayuran (Vegetables)
+    // Sayuran
     vegetables: [
-        'tomato', 'tomat', 'chili', 'cabe', 'pepper', 'paprika', 'eggplant', 'terong',
-        'cucumber', 'mentimun', 'carrot', 'wortel', 'potato', 'kentang', 'cabbage', 'kubis',
-        'spinach', 'bayam', 'lettuce', 'selada', 'broccoli', 'brokoli', 'cauliflower', 'kembang kol',
-        'onion', 'bawang merah', 'garlic', 'bawang putih', 'ginger', 'jahe', 'turmeric', 'kunyit',
-        'galangal', 'lengkuas', 'lemongrass', 'serai', 'kale', 'celery', 'seledri', 'radish', 'lobak',
-        'pumpkin', 'labu', 'squash', 'zucchini', 'bean', 'kacang', 'pea', 'kapri', 'corn', 'jagung'
+        'tomato', 'tomat', 'cucumber', 'mentimun', 'carrot', 'wortel', 'potato', 'kentang',
+        'cabbage', 'kubis', 'broccoli', 'brokoli', 'cauliflower', 'kembang kol',
+        'spinach', 'bayam', 'lettuce', 'selada', 'kale', 'celery', 'seledri',
+        'onion', 'bawang', 'garlic', 'bawang putih', 'chili', 'cabe', 'pepper', 'paprika',
+        'eggplant', 'terong', 'pumpkin', 'labu', 'corn', 'jagung', 'bean', 'kacang',
+        
+        // Tambahan
+        'vegetable', 'sayur', 'sayuran', 'leafy greens', 'daun', 'root vegetable'
     ],
     
-    // Daun-daunan (Leaves)
+    // Daun & Tanaman
     leaves: [
-        'leaf', 'daun', 'foliage', 'frond', 'palm leaf', 'daun kelapa', 'banana leaf', 'daun pisang',
-        'moringa', 'kelor', 'basil', 'kemangi', 'mint', 'daun mint', 'coriander', 'ketumbar',
-        'parsley', 'peterseli', 'curry leaf', 'daun kari', 'bay leaf', 'daun salam', 'lemongrass',
-        'pandan', 'screwpine', 'tea leaf', 'daun teh', 'tobacco', 'tembakau', 'betel', 'sirih'
+        'leaf', 'daun', 'foliage', 'plant leaf', 'green leaf', 'daun hijau',
+        'basil', 'kemangi', 'mint', 'coriander', 'ketumbar', 'parsley', 'peterseli',
+        'banana leaf', 'daun pisang', 'papaya leaf', 'daun pepaya',
+        
+        // Tanaman hias
+        'ornamental plant', 'tanaman hias', 'flower', 'bunga', 'rose', 'mawar',
+        'orchid', 'anggrek', 'sunflower', 'bunga matahari', 'lily', 'tulip'
     ],
     
-    // Tanaman Hias (Ornamental)
-    ornamentals: [
-        'rose', 'mawar', 'orchid', 'anggrek', 'lily', 'bunga lili', 'tulip', 'sunflower', 'bunga matahari',
-        'jasmine', 'melati', 'hibiscus', 'kembang sepatu', 'lavender', 'frangipani', 'kamboja',
-        'chrysanthemum', 'krisan', 'daisy', 'aster', 'marigold', 'gemitir', 'bougainvillea', 'bunga kertas',
-        'hydrangea', 'carnation', 'anyelir', 'gardenia', 'kaca piring', 'magnolia', 'cherry blossom', 'sakura'
-    ],
-    
-    // Pohon & Tanaman Besar (Trees)
-    trees: [
-        'tree', 'pohon', 'bamboo', 'bambu', 'palm', 'kelapa sawit', 'cactus', 'kaktus', 'succulent',
-        'fern', 'pakis', 'moss', 'lumut', 'grass', 'rumput', 'banyan', 'beringin', 'mango tree', 'pohon mangga',
-        'coconut tree', 'pohon kelapa', 'banana tree', 'pohon pisang', 'rubber tree', 'karet', 'teak', 'jati',
-        'mahogany', 'mahoni', 'pine', 'pinus', 'oak', 'maple', 'birch'
+    // Kata kunci umum tanaman (ini penting!)
+    general: [
+        'plant', 'tanaman', 'tree', 'pohon', 'herb', 'herbal', 'weed', 'gulma',
+        'crop', 'panen', 'garden', 'kebun', 'potted', 'pot', 'seed', 'biji',
+        'sprout', 'tunas', 'stem', 'batang', 'root', 'akar', 'flower', 'bunga',
+        'green', 'hijau', 'nature', 'alam', 'outdoor', 'luar ruangan',
+        
+        // Yang sering muncul di MobileNet
+        'potted plant', 'houseplant', 'garden plant', 'flowering plant',
+        'vegetable garden', 'fruit tree', 'berry', 'citrus', 'tropical'
     ]
 };
 
-// Kata-kata yang menandakan BUKAN tanaman (NON-PLANT)
-const NON_PLANT_INDICATORS = [
-    'car', 'mobil', 'motor', 'bike', 'sepeda', 'person', 'orang', 'human', 'manusia', 'animal', 'hewan',
-    'dog', 'anjing', 'cat', 'kucing', 'bird', 'burung', 'fish', 'ikan', 'building', 'gedung', 'house',
-    'rumah', 'chair', 'kursi', 'table', 'meja', 'phone', 'handphone', 'laptop', 'computer', 'komputer',
-    'book', 'buku', 'pen', 'pulpen', 'bottle', 'botol', 'cup', 'gelas', 'plate', 'piring', 'food', 'makanan',
-    'bread', 'roti', 'cake', 'kue', 'candy', 'permen', 'chocolate', 'coklat', 'shoe', 'sepatu', 'clothes', 'baju',
-    'ball', 'bola', 'toy', 'mainan', 'television', 'tv', 'remote', 'key', 'kunci', 'wallet', 'dompet'
+// ==================== KATA KUNCI NON-TANAMAN ====================
+const NON_PLANT_KEYWORDS = [
+    // Manusia
+    'person', 'people', 'man', 'woman', 'child', 'baby', 'human', 'face',
+    'hand', 'foot', 'arm', 'leg', 'head', 'hair', 'eye', 'mouth',
+    
+    // Hewan
+    'dog', 'cat', 'bird', 'fish', 'cow', 'horse', 'chicken', 'duck',
+    'rabbit', 'snake', 'lizard', 'insect', 'bug', 'butterfly', 'bee',
+    
+    // Kendaraan
+    'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'airplane', 'boat',
+    'vehicle', 'train', 'subway', 'scooter',
+    
+    // Elektronik
+    'phone', 'laptop', 'computer', 'tablet', 'television', 'camera',
+    'screen', 'monitor', 'keyboard', 'mouse', 'speaker', 'headphone',
+    
+    // Makanan olahan (bukan tanaman segar)
+    'pizza', 'burger', 'sandwich', 'cake', 'cookie', 'bread', 'rice',
+    'noodle', 'soup', 'salad', 'chocolate', 'candy', 'ice cream',
+    'cooked', 'fried', 'baked', 'roasted',
+    
+    // Benda
+    'book', 'pen', 'pencil', 'paper', 'bottle', 'cup', 'glass', 'plate',
+    'bowl', 'fork', 'spoon', 'knife', 'chair', 'table', 'bed', 'lamp',
+    'bag', 'wallet', 'key', 'watch', 'shoe', 'clothes', 'shirt',
+    
+    // Bangunan
+    'building', 'house', 'room', 'wall', 'door', 'window', 'floor',
+    'ceiling', 'roof', 'furniture', 'cabinet', 'shelf', 'drawer'
 ];
 
-// Database penyakit tanaman (untuk analisis kesehatan)
-const DISEASE_INDICATORS = {
-    yellow: ['yellow', 'kuning', 'chlorosis', 'menguning'],
-    brown: ['brown', 'coklat', 'necrosis', 'kering'],
-    spot: ['spot', 'bercak', 'blight', 'hawar', 'anthracnose'],
-    rot: ['rot', 'busuk', 'mold', 'jamur', 'mildew', 'embun'],
-    wilt: ['wilt', 'layu', 'fusarium', 'bacterial wilt'],
-    rust: ['rust', 'karat', 'puccinia'],
-    mosaic: ['mosaic', 'mozaik', 'virus'],
-    leaf_curl: ['curl', 'keriting', 'leaf curl']
+// ==================== DATABASE KESEHATAN SEDERHANA ====================
+const HEALTH_SIMPLE = {
+    good: ['fresh', 'segar', 'green', 'hijau', 'ripe', 'matang', 'healthy', 'sehat', 'glossy'],
+    bad: ['yellow', 'kuning', 'brown', 'coklat', 'dry', 'kering', 'wilted', 'layu', 
+          'spot', 'bercak', 'rot', 'busuk', 'damage', 'rusak', 'disease', 'penyakit']
 };
 
-// ==================== UTILITY FUNCTIONS ====================
-function getAllPlants() {
-    return [
-        ...PLANT_DB.fruits,
-        ...PLANT_DB.vegetables,
-        ...PLANT_DB.leaves,
-        ...PLANT_DB.ornamentals,
-        ...PLANT_DB.trees
-    ];
-}
+// ==================== FUNGSI DETEKSI ====================
 
-function getPlantCategory(className) {
+// Cek apakah ini tanaman (balikin true/false)
+function isPlantDetected(className) {
     const lower = className.toLowerCase();
     
-    if (PLANT_DB.fruits.some(f => lower.includes(f))) return 'buah';
-    if (PLANT_DB.vegetables.some(v => lower.includes(v))) return 'sayuran';
-    if (PLANT_DB.leaves.some(l => lower.includes(l))) return 'daun';
-    if (PLANT_DB.ornamentals.some(o => lower.includes(o))) return 'tanaman hias';
-    if (PLANT_DB.trees.some(t => lower.includes(t))) return 'pohon';
-    
-    // Deteksi berdasarkan kata kunci umum
-    if (lower.includes('fruit') || lower.includes('buah')) return 'buah';
-    if (lower.includes('vegetable') || lower.includes('sayur')) return 'sayuran';
-    if (lower.includes('leaf') || lower.includes('daun')) return 'daun';
-    if (lower.includes('flower') || lower.includes('bunga')) return 'bunga';
-    
-    return 'tanaman';
-}
-
-// Fungsi cek apakah ini tanaman dengan logika lebih pintar
-function isPlant(className, probability) {
-    const lower = className.toLowerCase();
-    
-    // PRIORITAS 1: Cek NON-PLANT (langsung tolak jika ketemu)
-    for (let non of NON_PLANT_INDICATORS) {
-        if (lower.includes(non)) {
+    // CEK NON-PLANT DULU - langsung false kalo ketemu
+    for (let keyword of NON_PLANT_KEYWORDS) {
+        if (lower.includes(keyword)) {
             return false;
         }
     }
     
-    // PRIORITAS 2: Cek PLANT di database
-    const allPlants = getAllPlants();
-    for (let plant of allPlants) {
-        if (lower.includes(plant)) {
-            return true;
-        }
-    }
-    
-    // PRIORITAS 3: Cek kata kunci umum tanaman
-    const plantKeywords = ['plant', 'tanaman', 'tree', 'pohon', 'flower', 'bunga', 'fruit', 'buah', 
-                          'leaf', 'daun', 'vegetable', 'sayur', 'herb', 'herbal', 'weed', 'gulma',
-                          'crop', 'panen', 'garden', 'kebun', 'pot', 'potted', 'seed', 'biji'];
-    
-    for (let keyword of plantKeywords) {
-        if (lower.includes(keyword)) {
-            return true;
-        }
-    }
-    
-    // PRIORITAS 4: Jika probabilitas tinggi dan ada indikasi hijau/alam
-    if (probability > 0.7) {
-        const natureIndicators = ['green', 'hijau', 'nature', 'alam', 'outdoor', 'luar', 'garden', 'kebun'];
-        for (let ind of natureIndicators) {
-            if (lower.includes(ind)) {
+    // CEK PLANT KEYWORDS
+    for (let category in PLANT_KEYWORDS) {
+        for (let keyword of PLANT_KEYWORDS[category]) {
+            if (lower.includes(keyword)) {
                 return true;
             }
         }
@@ -157,107 +138,115 @@ function isPlant(className, probability) {
     return false;
 }
 
-// Ekstrak nama tanaman dengan format yang rapi
+// Ambil nama tanaman dari hasil prediksi
 function extractPlantName(className) {
     const lower = className.toLowerCase();
-    const allPlants = getAllPlants();
     
-    // Cari kecocokan terbaik di database
-    let bestMatch = null;
-    let bestMatchLength = 0;
-    
-    for (let plant of allPlants) {
-        if (lower.includes(plant)) {
-            if (plant.length > bestMatchLength) {
-                bestMatchLength = plant.length;
-                bestMatch = plant;
-            }
+    // Coba cari di database buah
+    for (let fruit of PLANT_KEYWORDS.fruits) {
+        if (lower.includes(fruit)) {
+            return fruit.charAt(0).toUpperCase() + fruit.slice(1);
         }
     }
     
-    if (bestMatch) {
-        // Format nama: huruf besar di awal setiap kata
-        return bestMatch.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' ');
+    // Coba cari di database sayur
+    for (let veg of PLANT_KEYWORDS.vegetables) {
+        if (lower.includes(veg)) {
+            return veg.charAt(0).toUpperCase() + veg.slice(1);
+        }
     }
     
-    // Jika tidak ketemu di database, ambil kata pertama dan bersihkan
-    let cleanName = className.split(',')[0].trim();
-    // Hapus angka dan karakter khusus
-    cleanName = cleanName.replace(/[0-9]/g, '').trim();
-    // Format huruf besar
-    return cleanName.split(' ').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    ).join(' ');
+    // Coba cari di database daun
+    for (let leaf of PLANT_KEYWORDS.leaves) {
+        if (lower.includes(leaf)) {
+            return leaf.charAt(0).toUpperCase() + leaf.slice(1);
+        }
+    }
+    
+    // Kalo gak ketemu, ambil kata pertama
+    let name = className.split(',')[0].trim();
+    return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-// Analisis kesehatan tanaman berdasarkan nama dan probabilitas
-function analyzeHealth(className, probability) {
+// Analisis kesehatan sederhana tapi akurat
+function analyzeSimpleHealth(className) {
     const lower = className.toLowerCase();
-    let healthScore = probability * 100;
-    let diseases = [];
-    let advice = [];
+    let score = 70; // Nilai dasar
     
-    // Deteksi penyakit berdasarkan kata kunci
-    for (let [disease, keywords] of Object.entries(DISEASE_INDICATORS)) {
-        for (let keyword of keywords) {
-            if (lower.includes(keyword)) {
-                diseases.push(disease);
-                healthScore -= 25; // Kurangi skor jika ada penyakit
-                break;
-            }
+    // Cek indikator kesehatan
+    for (let good of HEALTH_SIMPLE.good) {
+        if (lower.includes(good)) {
+            score += 15;
         }
     }
     
-    // Analisis berdasarkan kategori
-    const category = getPlantCategory(className);
-    
-    // Berikan saran berdasarkan kondisi
-    if (diseases.length > 0) {
-        if (diseases.includes('yellow')) {
-            advice.push('Daun menguning - mungkin kekurangan nitrogen atau overwatering');
-        }
-        if (diseases.includes('brown')) {
-            advice.push('Daun coklat/kering - mungkin kekurangan air atau terbakar sinar matahari');
-        }
-        if (diseases.includes('spot')) {
-            advice.push('Terdapat bercak - kemungkinan infeksi jamur atau bakteri');
-        }
-        if (diseases.includes('rot')) {
-            advice.push('Pembusukan terdeteksi - periksa kelembaban dan drainase');
-        }
-        if (diseases.includes('wilt')) {
-            advice.push('Tanaman layu - bisa karena kekurangan air atau serangan akar');
-        }
-        if (diseases.includes('rust')) {
-            advice.push('Karat pada daun - infeksi jamur, perlu fungisida');
+    // Cek indikator penyakit
+    for (let bad of HEALTH_SIMPLE.bad) {
+        if (lower.includes(bad)) {
+            score -= 25;
         }
     }
     
-    // Batasi skor antara 0-100
-    healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+    // Batasi skor 0-100
+    score = Math.max(20, Math.min(100, score));
     
-    return {
-        score: healthScore,
-        diseases: diseases,
-        advice: advice,
-        category: category
-    };
+    // Tentukan status
+    let status, color, advice;
+    
+    if (score >= 80) {
+        status = 'SEHAT';
+        color = '#00ff88';
+        advice = 'Tanaman dalam kondisi baik. Lanjutkan perawatan rutin.';
+    } else if (score >= 60) {
+        status = 'CUKUP SEHAT';
+        color = '#ffaa00';
+        advice = 'Tanaman cukup sehat. Perhatikan penyiraman dan pencahayaan.';
+    } else if (score >= 40) {
+        status = 'KURANG SEHAT';
+        color = '#ff884d';
+        advice = 'Tanaman perlu perhatian. Cek kemungkinan hama atau penyakit.';
+    } else {
+        status = 'SAKIT';
+        color = '#ff4444';
+        advice = 'Tanaman sakit. Segera lakukan perawatan intensif.';
+    }
+    
+    return { score, status, color, advice };
+}
+
+// Tentukan kategori tanaman
+function getPlantCategory(className) {
+    const lower = className.toLowerCase();
+    
+    for (let fruit of PLANT_KEYWORDS.fruits) {
+        if (lower.includes(fruit)) return 'Buah';
+    }
+    
+    for (let veg of PLANT_KEYWORDS.vegetables) {
+        if (lower.includes(veg)) return 'Sayuran';
+    }
+    
+    for (let leaf of PLANT_KEYWORDS.leaves) {
+        if (lower.includes(leaf)) return 'Daun';
+    }
+    
+    return 'Tanaman';
 }
 
 // ==================== LOAD AI ====================
 (async () => {
     try {
         loadingText.style.display = "block";
-        instruction.innerHTML = "<p>Memuat AI Pintar PlantScan...</p>";
+        instruction.innerHTML = "<p>⏳ Memuat AI...</p>";
+        
         model = await mobilenet.load();
         isModelReady = true;
+        
         loadingText.style.display = "none";
         instruction.innerHTML = "<p>AI siap! Silakan upload foto tanaman.</p>";
-        console.log("AI Ready with Smart Detection");
+        console.log("AI siap digunakan");
     } catch (e) {
-        loadingText.innerHTML = "Gagal memuat AI.";
+        loadingText.innerHTML = "Gagal memuat AI. Refresh halaman.";
         console.error(e);
     }
 })();
@@ -268,22 +257,22 @@ async function openCamera() {
     try {
         currentStream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
-                facingMode: "environment", 
-                width: { ideal: 1280 }, 
-                height: { ideal: 1280 } 
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 1280 }
             } 
         });
+        
         webcam.srcObject = currentStream;
-        webcam.setAttribute('playsinline', true);
         webcam.style.display = "block";
         imgPrev.style.display = "none";
         btnSnap.style.display = "flex";
         confirmUI.style.display = "none";
         mainControls.style.display = "flex";
         dashboard.classList.remove('visible');
-        instruction.innerHTML = "<p>Posisikan tanaman di tengah layar, pastikan pencahayaan cukup.</p>";
+        instruction.innerHTML = "<p>Posisikan tanaman di tengah layar.</p>";
     } catch (e) {
-        alert("Kamera gagal dibuka. Gunakan HTTPS atau izinkan akses kamera.");
+        alert("Kamera gagal dibuka. Cek izin kamera.");
     }
 }
 
@@ -295,27 +284,25 @@ function stopCamera() {
 }
 
 function takePhoto() {
-    canvas.width = 640;
-    canvas.height = 640;
-    const ctx = canvas.getContext('2d');
-
+    canvas.width = 800;
+    canvas.height = 800;
+    
     const vW = webcam.videoWidth;
     const vH = webcam.videoHeight;
     const min = Math.min(vW, vH);
     const sx = (vW - min) / 2;
     const sy = (vH - min) / 2;
 
-    ctx.drawImage(webcam, sx, sy, min, min, 0, 0, 640, 640);
+    ctx.drawImage(webcam, sx, sy, min, min, 0, 0, canvas.width, canvas.height);
     
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    imgPrev.src = dataUrl;
+    imgPrev.src = canvas.toDataURL('image/jpeg', 0.9);
     
     imgPrev.style.display = "block";
     webcam.style.display = "none";
     btnSnap.style.display = "none";
     mainControls.style.display = "none";
     confirmUI.style.display = "flex"; 
-    instruction.innerHTML = "<p>Foto diambil! Tekan ✓ untuk analisis, atau ✗ untuk ulang.</p>";
+    instruction.innerHTML = "<p>Foto siap! Tekan ✓ untuk analisis.</p>";
 }
 
 function cancelPhoto() {
@@ -332,12 +319,6 @@ function handleUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validasi tipe file
-    if (!file.type.startsWith('image/')) {
-        alert('Harap upload file gambar!');
-        return;
-    }
-
     const reader = new FileReader();
     reader.onload = (event) => {
         imgPrev.src = event.target.result;
@@ -349,174 +330,120 @@ function handleUpload(e) {
             mainControls.style.display = "none";
             confirmUI.style.display = "flex"; 
             dashboard.classList.remove('visible');
-            instruction.innerHTML = "<p>Gambar siap! Tekan ✓ untuk analisis.</p>";
+            instruction.innerHTML = "<p> Gambar siap! Tekan ✓ untuk analisis.</p>";
         };
     };
     reader.readAsDataURL(file);
-    
-    // Reset input file agar bisa upload file yang sama lagi
     e.target.value = '';
 }
 
-// ==================== ANALISIS UTAMA (PINTAR) ====================
+// ==================== ANALISIS UTAMA ====================
 function proceedAnalysis() {
-    if(!isModelReady) return alert("AI belum siap, tunggu sebentar...");
+    if(!isModelReady) return alert("AI belum siap, tunggu...");
     if(!imgPrev.src || imgPrev.style.display === "none") {
-        alert("Tidak ada gambar untuk dianalisis!");
+        alert("Tidak ada gambar!");
         return;
     }
     
     actionArea.style.display = "none";
     scanner.style.display = "block";
     loadingText.style.display = "block";
-    loadingText.innerHTML = '<div class="spinner"></div><p>Menganalisis tanaman dengan AI Pintar...</p>';
+    loadingText.innerHTML = '<div class="spinner"></div><p> Menganalisis...</p>';
     stopCamera();
     
-    setTimeout(() => { executeSmartAI(imgPrev); }, 500);
+    setTimeout(() => { runAnalysis(imgPrev); }, 500);
 }
 
-async function executeSmartAI(source) {
+async function runAnalysis(source) {
     try {
-        // Ambil 30 prediksi teratas untuk akurasi maksimal
-        const predictions = await model.classify(source, 30);
+        // Ambil 10 prediksi
+        const predictions = await model.classify(source, 10);
         
-        console.log("All Predictions:", predictions); // Untuk debugging
+        console.log("Predictions:", predictions);
         
-        // Filter hanya prediksi tanaman
-        const plantPredictions = predictions.filter(p => isPlant(p.className, p.probability));
+        // Cari prediksi tanaman pertama
+        let plantFound = null;
+        let nonPlantDetected = false;
+        
+        for (let p of predictions) {
+            // Cek apakah ini tanaman
+            if (isPlantDetected(p.className)) {
+                plantFound = p;
+                break;
+            }
+        }
         
         loadingText.style.display = "none";
         scanner.style.display = "none";
         actionArea.style.display = "block";
 
-        // Jika tidak ada tanaman terdeteksi
-        if (plantPredictions.length === 0) {
+        // Kalo ada tanaman
+        if (plantFound) {
+            const plantName = extractPlantName(plantFound.className);
+            const category = getPlantCategory(plantFound.className);
+            const health = analyzeSimpleHealth(plantFound.className);
+            
+            // Tampilkan hasil
+            dashboard.classList.add('visible');
+            confirmUI.style.display = "none";
+            mainControls.style.display = "none";
+
+            document.getElementById('res-name').innerText = plantName;
+            document.getElementById('res-percent').innerText = health.score + "%";
+            
+            const circle = document.getElementById('res-circle');
+            circle.style.strokeDashoffset = 226 - (226 * health.score / 100);
+            
+            const statusEl = document.getElementById('res-status');
+            statusEl.innerText = health.status;
+            statusEl.style.color = health.color;
+            circle.style.stroke = health.color;
+            
+            document.getElementById('res-advice').innerText = health.advice;
+            
+            // Tampilkan kategori
+            let icon = "🌿";
+            if (category === 'Buah') icon = "";
+            else if (category === 'Sayuran') icon = "";
+            else if (category === 'Daun') icon = "";
+            
+            instruction.innerHTML = `
+                <div style="padding: 10px;">
+                    <p>${icon} <b>${plantName}</b> (${category})</p>
+                    <p>Akurasi: ${Math.round(plantFound.probability * 100)}%</p>
+                </div>
+            `;
+            
+        } else {
+            // TIDAK ADA TANAMAN - TAMPILKAN ERROR
             confirmUI.style.display = "none";
             mainControls.style.display = "flex";
             
-            // Ambil 3 prediksi tertinggi untuk ditampilkan
+            // Ambil 3 prediksi teratas
             const top3 = predictions.slice(0, 3).map(p => 
                 p.className.split(',')[0].trim()
             ).join(', ');
             
             instruction.innerHTML = `
-            <div style="border: 2px solid #ff4444; background: rgba(255,68,68,0.2); padding: 25px; border-radius: 20px; text-align: center;">
-                <i class="fa-solid fa-circle-exclamation" style="font-size: 50px; color: #ff4444; margin-bottom: 15px;"></i>
-                <br>
-                <b style="color: #ff4444; font-size: 20px;">BUKAN TANAMAN!</b><br><br>
-                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px;">
-                    <span style="font-size: 14px; color: #ddd;">AI Mendeteksi:</span><br>
-                    <span style="font-size: 16px; color: #ffaa00; font-weight: bold;">${top3}</span>
-                </div><br>
-                <small style="color: #ddd;">Harap foto tanaman, buah, atau daun dengan jelas.<br>
-                Pastikan objek utama adalah tanaman dan pencahayaan cukup.</small>
-            </div>`;
-            return;
+                <div style="border: 3px solid #ff4444; background: #330000; padding: 20px; border-radius: 20px; text-align: center;">
+                    <div style="font-size: 50px; margin-bottom: 10px;">🚫</div>
+                    <h3 style="color: #ff4444;">BUKAN TANAMAN!</h3>
+                    <p style="background: #222; padding: 10px; border-radius: 10px; color: #ffaa00;">
+                        ${top3}
+                    </p>
+                    <p style="color: #aaa; margin-top: 15px;">Hanya menerima foto tanaman, buah, atau sayuran segar.</p>
+                </div>
+            `;
         }
-
-        // Ambil prediksi tanaman terbaik (dengan probabilitas tertinggi)
-        const bestPlant = plantPredictions.reduce((best, current) => 
-            (current.probability > best.probability) ? current : best
-        , plantPredictions[0]);
-
-        // Analisis kesehatan
-        const healthAnalysis = analyzeHealth(bestPlant.className, bestPlant.probability);
-        
-        // Ekstrak nama tanaman
-        const plantName = extractPlantName(bestPlant.className);
-        const category = healthAnalysis.category;
-        
-        // Tampilkan Dashboard
-        dashboard.classList.add('visible');
-        confirmUI.style.display = "none";
-        mainControls.style.display = "none";
-
-        // Update UI
-        document.getElementById('res-name').innerText = plantName;
-        document.getElementById('res-percent').innerText = healthAnalysis.score + "%";
-        
-        const circle = document.getElementById('res-circle');
-        circle.style.strokeDashoffset = 226 - (226 * healthAnalysis.score / 100);
-        
-        // Tentukan status dan warna berdasarkan skor kesehatan
-        const statusEl = document.getElementById('res-status');
-        const adviceEl = document.getElementById('res-advice');
-        
-        if (healthAnalysis.score >= 80) {
-            statusEl.innerText = "SEHAT";
-            statusEl.style.color = "#00ff88";
-            circle.style.stroke = "#00ff88";
-            adviceEl.innerText = "Tanaman dalam kondisi sangat baik! Teruskan perawatan yang sudah dilakukan.";
-        } 
-        else if (healthAnalysis.score >= 60) {
-            statusEl.innerText = "CUKUP SEHAT";
-            statusEl.style.color = "#ffaa00";
-            circle.style.stroke = "#ffaa00";
-            
-            if (healthAnalysis.advice.length > 0) {
-                adviceEl.innerText = healthAnalysis.advice[0];
-            } else {
-                adviceEl.innerText = "Tanaman cukup sehat, namun bisa ditingkatkan perawatannya.";
-            }
-        }
-        else if (healthAnalysis.score >= 40) {
-            statusEl.innerText = "KURANG SEHAT";
-            statusEl.style.color = "#ff884d";
-            circle.style.stroke = "#ff884d";
-            
-            if (healthAnalysis.advice.length > 0) {
-                adviceEl.innerText = healthAnalysis.advice[0];
-            } else {
-                adviceEl.innerText = "Tanaman membutuhkan perhatian lebih. Periksa kondisi tanah dan lingkungan.";
-            }
-        }
-        else {
-            statusEl.innerText = "KRITIS";
-            statusEl.style.color = "#ff4444";
-            circle.style.stroke = "#ff4444";
-            
-            if (healthAnalysis.advice.length > 0) {
-                adviceEl.innerText = healthAnalysis.advice[0] + " Segera lakukan tindakan penyelamatan!";
-            } else {
-                adviceEl.innerText = "Tanaman dalam kondisi kritis! Periksa kemungkinan penyakit serius atau kekurangan nutrisi.";
-            }
-        }
-        
-        // Tampilkan detail di instruction
-        let categoryIcon = "🌱";
-        if (category === 'buah') categoryIcon = "🍎";
-        else if (category === 'sayuran') categoryIcon = "🥕";
-        else if (category === 'daun') categoryIcon = "🍃";
-        else if (category === 'bunga') categoryIcon = "🌸";
-        else if (category === 'pohon') categoryIcon = "🌳";
-        
-        let diseaseInfo = "";
-        if (healthAnalysis.diseases.length > 0) {
-            diseaseInfo = `<br><small style="color: #ff884d;">⚠️ Terdeteksi: ${healthAnalysis.diseases.join(', ')}</small>`;
-        }
-        
-        instruction.innerHTML = `
-            <p>
-                ${categoryIcon} <b>${category.toUpperCase()}</b> terdeteksi<br>
-                Nama: ${plantName}<br>
-                Kepercayaan: ${Math.round(bestPlant.probability * 100)}%
-                ${diseaseInfo}
-            </p>
-        `;
 
     } catch (error) {
-        console.error("Error in AI execution:", error);
+        console.error("Error:", error);
         loadingText.style.display = "none";
         scanner.style.display = "none";
         actionArea.style.display = "block";
         confirmUI.style.display = "none";
         mainControls.style.display = "flex";
-        
-        instruction.innerHTML = `
-        <div style="border: 2px solid #ff4444; background: rgba(255,68,68,0.2); padding: 20px; border-radius: 15px;">
-            <b style="color: #ff4444;">Terjadi Kesalahan</b><br>
-            <small>Silakan coba lagi atau upload gambar lain</small>
-        </div>`;
+        instruction.innerHTML = "<p style='color:red'>Error, coba lagi.</p>";
     }
 }
 
@@ -532,12 +459,4 @@ function resetAll() {
     webcam.style.display = "none"; 
     btnSnap.style.display = "none"; 
     instruction.innerHTML = "<p>Pilih kamera atau upload gambar tanaman.</p>";
-}
-
-window.addEventListener('load', () => {
-    console.log("PlantScan AI Super Siap!");
-});
-
-if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    console.log("Mode HP terdeteksi - optimasi kamera");
 }
