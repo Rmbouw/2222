@@ -160,3 +160,10 @@ canvas { display: none; }
     color: #790b0b; 
     font-weight: 600;
 }
+
+.baru {
+    text-align: center;
+    margin: 20px 0 30px;
+    font-size: 1.2rem;
+    margin-top: auto;
+}
