@@ -14,7 +14,7 @@ const confirmUI = document.getElementById('confirm-ui');
 const mainControls = document.getElementById('main-controls');
 const canvas = document.getElementById('capture-canvas');
 
-// --- LOAD AI (Instan tanpa delay) ---
+// --- LOAD AI (Tanpa delay, langsung sikat) ---
 (async () => {
     try {
         model = await mobilenet.load();
@@ -29,9 +29,8 @@ const canvas = document.getElementById('capture-canvas');
 async function openCamera() {
     stopCamera();
     try {
-        // Minta resolusi tinggi tapi tetap ideal buat diproses
         currentStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: { ideal: 1080 }, height: { ideal: 1080 } } 
+            video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 640 } } 
         });
         webcam.srcObject = currentStream;
         webcam.setAttribute('playsinline', true);
@@ -41,7 +40,7 @@ async function openCamera() {
         confirmUI.style.display = "none";
         mainControls.style.display = "flex";
         dashboard.classList.remove('visible');
-        instruction.innerHTML = "<p>Posisikan tanaman tepat di tengah kotak, lalu ambil foto.</p>";
+        instruction.innerHTML = "<p>Posisikan objek di tengah layar.</p>";
     } catch (e) {
         alert("Kamera gagal dibuka. Gunakan HTTPS.");
     }
@@ -55,45 +54,117 @@ function stopCamera() {
 }
 
 function takePhoto() {
-    // Ukuran canvas standar AI
-    canvas.width = 448; 
-    canvas.height = 448;
-    
-    // LOGIKA CROP TENGAH (Penting biar objek gak gepeng di HP)
+    // Gunakan ukuran 300px agar memori HP gak berat dan gambar PASTI muncul
+    canvas.width = 300;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+
+    // Ambil ukuran asli video
     const vW = webcam.videoWidth;
     const vH = webcam.videoHeight;
-    const minSize = Math.min(vW, vH);
-    const sx = (vW - minSize) / 2;
-    const sy = (vH - minSize) / 2;
+    const min = Math.min(vW, vH);
+    const sx = (vW - min) / 2;
+    const sy = (vH - min) / 2;
 
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(webcam, sx, sy, minSize, minSize, 0, 0, 448, 448);
+    // Gambar ke canvas
+    ctx.drawImage(webcam, sx, sy, min, min, 0, 0, 300, 300);
     
-    imgPrev.src = canvas.toDataURL('image/jpeg', 0.9);
+    // Konversi ke Base64 (Gambar Preview)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    imgPrev.src = dataUrl;
+    
+    // Update UI
     imgPrev.style.display = "block";
     webcam.style.display = "none";
     btnSnap.style.display = "none";
     mainControls.style.display = "none";
     confirmUI.style.display = "flex"; 
-    instruction.innerHTML = "<p>Pastikan objek terlihat jelas. Tekan <b>V</b> untuk analisa.</p>";
-}
-
-function cancelPhoto() {
-    imgPrev.style.display = "none";
-    webcam.style.display = "block";
-    btnSnap.style.display = "flex";
-    confirmUI.style.display = "none";
-    mainControls.style.display = "flex";
+    instruction.innerHTML = "<p>Gambar tertangkap! Tekan <b>V</b> untuk analisa.</p>";
 }
 
 function proceedAnalysis() {
-    if(!isModelReady) return alert("Tunggu AI siap!");
+    if(!isModelReady) return alert("AI Belum Siap!");
+    
     actionArea.style.display = "none";
     scanner.style.display = "block";
     loadingText.style.display = "block";
-    loadingText.innerText = "Menganalisa Objek...";
+    loadingText.innerText = "Menganalisa Flora...";
     stopCamera();
-    setTimeout(() => { executeAI(imgPrev); }, 400);
+    
+    // Jalankan eksekusi
+    setTimeout(() => { executeAI(imgPrev); }, 500);
+}
+
+async function executeAI(source) {
+    // Ambil 15 prediksi agar pencarian flora lebih luas
+    const predictions = await model.classify(source, 15); 
+    
+    // Keyword flora super luas
+    const floraDB = [
+        'leaf', 'plant', 'tree', 'flower', 'flora', 'fruit', 'vegetable', 'nature', 'herb', 'shrub',
+        'apple', 'banana', 'orange', 'lemon', 'pineapple', 'grape', 'strawberry', 'mango', 'pomegranate',
+        'corn', 'maize', 'paddy', 'tomato', 'potato', 'chili', 'cactus', 'succulent', 'orchid', 'rose',
+        'bonsai', 'moss', 'fern', 'palm', 'grass', 'bud', 'petal', 'stem', 'branch', 'vein', 'pot', 'garden',
+        'produce', 'buckeye', 'custard apple', 'guava', 'jackfruit', 'organism'
+    ];
+
+    // Hunter: Cari yang paling mendekati flora
+    let bestMatch = null;
+    for (let p of predictions) {
+        if (floraDB.some(key => p.className.toLowerCase().includes(key))) {
+            bestMatch = p;
+            break;
+        }
+    }
+
+    loadingText.style.display = "none";
+    scanner.style.display = "none";
+    actionArea.style.display = "block";
+
+    // Jika tidak ada flora sama sekali
+    if (!bestMatch) {
+        confirmUI.style.display = "none";
+        mainControls.style.display = "flex";
+        let topFail = predictions[0].className.split(',')[0].toUpperCase();
+        
+        instruction.innerHTML = `
+        <div style="border: 2px solid #ff4444; background: rgba(255,0,0,0.1); padding: 15px; border-radius: 12px; text-align: center;">
+            <b style="color: #ff4444;">⚠️ BUKAN FLORA</b><br>
+            <span style="font-size: 13px; color: #eee;">AI mendeteksi: <b style="color: #ffcc00;">${topFail}</b></span>
+            <p style="font-size: 11px; margin-top: 8px; color: #bbb;">Mohon foto Daun, Buah, atau Tanaman lebih dekat.</p>
+        </div>`;
+        return;
+    }
+
+    // Tampilkan Hasil
+    dashboard.classList.add('visible');
+    confirmUI.style.display = "none";
+    mainControls.style.display = "none";
+    instruction.innerHTML = "";
+
+    const name = bestMatch.className.split(',')[0].toUpperCase();
+    const score = Math.round(bestMatch.probability * 100);
+    
+    document.getElementById('res-name').innerText = name;
+    document.getElementById('res-percent').innerText = score + "%";
+    
+    const circle = document.getElementById('res-circle');
+    circle.style.strokeDashoffset = 226 - (226 * score / 100);
+    
+    // Status kesehatan
+    const label = bestMatch.className.toLowerCase();
+    const sick = ['yellow', 'brown', 'dry', 'dead', 'spot', 'rot', 'rust', 'mold'].some(s => label.includes(s));
+
+    const statusEl = document.getElementById('res-status');
+    if (sick || score < 30) {
+        statusEl.innerText = "KONDISI BURUK";
+        statusEl.style.color = "#ff4444";
+        circle.style.stroke = "#ff4444";
+    } else {
+        statusEl.innerText = "KONDISI SEHAT";
+        statusEl.style.color = "#00ff88";
+        circle.style.stroke = "#00ff88";
+    }
 }
 
 function handleUpload(e) {
@@ -109,95 +180,10 @@ function handleUpload(e) {
             mainControls.style.display = "none";
             confirmUI.style.display = "flex"; 
             dashboard.classList.remove('visible');
-            instruction.innerHTML = "<p>Gambar dimuat. Tekan <b>V</b> untuk analisa.</p>";
+            instruction.innerHTML = "<p>Gambar dimuat! Tekan <b>V</b> untuk analisa.</p>";
         };
     };
     reader.readAsDataURL(file);
-}
-
-// --- LOGIKA DETEKSI SUPER DETAIL ---
-async function executeAI(source) {
-    if (!source.complete) {
-        await new Promise(r => source.onload = r);
-    }
-
-    // Ambil 15 prediksi teratas (Lebih luas dari sebelumnya)
-    const predictions = await model.classify(source, 15); 
-    
-    // Database Flora Super Lengkap (Keyword yang sering muncul di MobileNet)
-    const floraKeywords = [
-        'leaf', 'plant', 'tree', 'flower', 'flora', 'fruit', 'vegetable', 'nature', 'herb', 'shrub',
-        'apple', 'banana', 'orange', 'lemon', 'pineapple', 'grape', 'strawberry', 'mango', 'pomegranate',
-        'corn', 'maize', 'paddy', 'tomato', 'potato', 'chili', 'cactus', 'succulent', 'orchid', 'rose',
-        'bonsai', 'moss', 'fern', 'palm', 'grass', 'bud', 'petal', 'stem', 'branch', 'vein', 'pot', 
-        'garden', 'wood', 'forest', 'wild', 'vascular', 'buckeye', 'head', 'ear', 'pod'
-    ];
-
-    let bestMatch = null;
-
-    // Deep Scan: Cari yang paling masuk akal sebagai flora
-    for (let pred of predictions) {
-        const label = pred.className.toLowerCase();
-        if (floraKeywords.some(key => label.includes(key))) {
-            bestMatch = pred;
-            break; 
-        }
-    }
-
-    loadingText.style.display = "none";
-    scanner.style.display = "none";
-    actionArea.style.display = "block";
-
-    // JIKA GAGAL DETEKSI
-    if (!bestMatch) {
-        confirmUI.style.display = "none";
-        mainControls.style.display = "flex";
-        let fallback = predictions[0].className.split(',')[0].toUpperCase();
-        
-        instruction.innerHTML = `
-        <div class="error-box-tua" style="border: 2px solid #ff4444; background: rgba(255,0,0,0.1); padding: 15px; border-radius: 12px; text-align: center;">
-            <div style="font-size: 40px; margin-bottom: 10px;">⚠️</div>
-            <b style="color: #ff4444; font-size: 16px;">OBJEK TIDAK DIKENALI SEBAGAI FLORA</b><br>
-            <span style="font-size: 13px; color: #eee;">Terdeteksi: <b style="color: #ffcc00;">${fallback}</b></span>
-            <p style="font-size: 11px; margin-top: 8px; color: #bbb;">Tips: Dekatkan kamera ke daun atau buah agar detail urat daun/tekstur terlihat jelas.</p>
-        </div>`;
-        return;
-    }
-
-    // TAMPILKAN HASIL
-    dashboard.classList.add('visible');
-    confirmUI.style.display = "none";
-    mainControls.style.display = "none";
-    instruction.innerHTML = "";
-
-    const name = bestMatch.className.split(',')[0].toUpperCase();
-    const score = Math.round(bestMatch.probability * 100);
-    
-    document.getElementById('res-name').innerText = name;
-    document.getElementById('res-percent').innerText = score + "%";
-    
-    const circle = document.getElementById('res-circle');
-    circle.style.strokeDashoffset = 226 - (226 * score / 100);
-    
-    // Logika Analisa Kondisi (Sakit/Sehat)
-    const labelLower = bestMatch.className.toLowerCase();
-    const sickSigns = ['brown', 'dry', 'dead', 'rot', 'mold', 'fungus', 'spot', 'yellow', 'wither', 'rust', 'worm'];
-    const isSick = sickSigns.some(w => labelLower.includes(w));
-    
-    const statusEl = document.getElementById('res-status');
-    const adviceEl = document.getElementById('res-advice');
-
-    if (isSick || score < 35) {
-        statusEl.innerText = "KONDISI: PERLU PERHATIAN";
-        statusEl.style.color = "#ff4444";
-        circle.style.stroke = "#ff4444";
-        adviceEl.innerText = "Terdeteksi adanya indikasi kerusakan jaringan, bercak, atau warna tidak normal.";
-    } else {
-        statusEl.innerText = "KONDISI: SEHAT";
-        statusEl.style.color = "#00ff88";
-        circle.style.stroke = "#00ff88";
-        adviceEl.innerText = "Objek terlihat segar. Pertahankan kelembapan dan nutrisi tanaman.";
-    }
 }
 
 function resetAll() {
@@ -210,5 +196,5 @@ function resetAll() {
     confirmUI.style.display = "none";
     webcam.style.display = "none"; 
     btnSnap.style.display = "none"; 
-    instruction.innerHTML = "<p>Silahkan upload atau gunakan kamera untuk menganalisis tanaman anda.</p>";
+    instruction.innerHTML = "<p>Silakan upload atau gunakan kamera.</p>";
 }
